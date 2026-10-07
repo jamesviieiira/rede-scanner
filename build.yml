@@ -1,0 +1,54 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Organizar arquivos (aceita upload sem pastas)
+        run: |
+          if [ -f main.dart ]; then
+            mkdir -p lib
+            mv main.dart lib/main.dart
+          fi
+          if [ -f AndroidManifest.xml ]; then
+            mkdir -p manifest
+            mv AndroidManifest.xml manifest/AndroidManifest.xml
+          fi
+          ls -R lib manifest
+
+      - name: Gerar projeto Android e aplicar nossos arquivos
+        run: |
+          cp pubspec.yaml /tmp/pubspec.yaml
+          cp lib/main.dart /tmp/main.dart
+          flutter create --platforms=android --project-name=rede_scanner --org=com.redescanner .
+          cp /tmp/pubspec.yaml pubspec.yaml
+          cp /tmp/main.dart lib/main.dart
+          cp manifest/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          # Garante compatibilidade com Android 7.1 (API 25)
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 25/; s/minSdkVersion flutter.minSdkVersion/minSdkVersion 25/' android/app/build.gradle*
+
+      - run: flutter pub get
+
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rede-scanner-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
